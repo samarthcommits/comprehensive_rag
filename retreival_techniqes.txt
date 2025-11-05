@@ -1,0 +1,41 @@
+Retrieval Techniques for RAG (Retrieval-Augmented Generation). These techniques can be combined or adapted based on the RAG system's requirements:
+
+Done ---->
+
+1. Sparse Retrieval
+    - BM25
+    - TF-IDF
+    - Inverted Index
+
+2. Dense Retrieval
+    - Dual Encoder (bi-encoder) models (e.g., DPR, ColBERT)
+    - Sentence Transformers
+
+3. Hybrid Retrieval
+    - Combination of sparse and dense methods (e.g., weighted fusion of BM25 and DPR)
+
+4. Neural Re-ranking
+    - Cross-encoder models for re-ranking top-k retrieved documents
+
+5. Pseudo-Relevance Feedback
+    - Query expansion based on initial retrieval results
+
+6. Approximate Nearest Neighbor (ANN) Search
+    - FAISS, ScaNN, Annoy for efficient dense vector search
+
+In progress ---->
+
+7. Knowledge Graph-based Retrieval
+    - Using structured knowledge bases for retrieval
+
+8. Multi-hop Retrieval
+    - Sequential retrieval for multi-step reasoning ----> extending ANN for the same
+
+Version 2 -->
+
+9. Contextual/Conversational Retrieval
+    - Retrieval conditioned on conversation history --> partially implemented (Conversational bot able to access chat history)
+
+
+10. External API/Database Retrieval (Scraping)
+     - Querying external sources (SQL, APIs) for information
