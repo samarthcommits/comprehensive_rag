@@ -326,6 +326,7 @@ if st.session_state.logged_in:
 
             # Path where you saved the file earlier
             file_path = f"documents/{st.session_state['user_name']}/{st.session_state['collection']}"
+            pdf_names = os.listdir(file_path)
             try:
                 for i in ['ann', 'sparse', 'dense', 'rerank']:
                     pdf_name = st.session_state['db_handler'].get_collection_info(user_name = st.session_state['user_name'], collection_name = f"{st.session_state['collection']}_{i}")['pdf_name']
@@ -333,6 +334,19 @@ if st.session_state.logged_in:
                         break
             except:
                 pdf_name = ''
+            
+            pdf_dict = {}
+            doc_dict = {}
+            for i in pdf_names:
+                file_p = os.path.join(file_path, i)
+                with open(file_p, "rb") as f:
+                    file_bytes = f.read()              
+                # Create a "file-like" object similar to Streamlit's uploaded file
+                fake_uploaded_file = BytesIO(file_bytes)
+                # if not st.session_state.pdf:
+                with pdfplumber.open(fake_uploaded_file) as pdf:
+                    pdf_dict[i] = pdf
+                doc_dict[i] = fitz.open(stream=file_bytes, filetype="pdf")
             # Read the file back as binary
             print('pdf-name here  ', pdf_name, st.session_state['user_name'], st.session_state['collection'])
             if pdf_name!='' and len(pdf_name)>0 and pdf_name:
@@ -341,6 +355,8 @@ if st.session_state.logged_in:
                 with open(file_p, "rb") as f:
                     file_bytes = f.read()
                 
+
+                 
                 # Create a "file-like" object similar to Streamlit's uploaded file
                 fake_uploaded_file = BytesIO(file_bytes)
                 # if not st.session_state.pdf:
@@ -430,9 +446,16 @@ if st.session_state.logged_in:
                         all_pages = st.session_state.pdf.pages
                         page_n = []
                         print('a1')
+                        page_pdf = {}
                         for i in retrieved_docs:
                             print(str(i.metadata['pages']), 'here page')
                             i.metadata['pages'] = json.loads(str(i.metadata['pages']))
+                            if i.metadata['pdf_name'] == '':
+                                print(i)
+                                continue
+                            if not page_pdf[i.metadata['pdf_name']]:
+                                page_pdf[i.metadata['pdf_name']] = i.metadata['pages']
+                            page_pdf[i.metadata['pdf_name']] = list(set(page_pdf[i.metadata['pdf_name']]+i.metadata['pages'])) 
                             page_n = page_n+i.metadata['pages']
                         full_context = []
                         # for i in list(set(page_n)):
@@ -440,29 +463,32 @@ if st.session_state.logged_in:
                         doc = st.session_state.doc
                         page_numbers = list(set(page_n))
                         print('a2')
-                        for page_num in page_numbers:
-                            print('a2.1')
-                            page = doc[page_num - 1]
-                            all_keywords = set()
-                            for retrieved_doc in retrieved_docs:
-                                words = retrieved_doc.page_content.split()
-                                keywords = [w.strip('.,!?;:') for w in words if len(w) > 4]
-                                len_k = len(keywords) // 2
-                                all_keywords.update(keywords[:len_k])
-                            
-                            # Highlight all keywords at once
-                            for keyword in all_keywords:
-                                text_instances = page.search_for(keyword)
-                                for inst in text_instances:
-                                    highlight = page.add_highlight_annot(inst)
-                                    highlight.set_colors(stroke=[1, 1, 0])
-                                    highlight.update()
+                        for pdf_p in page_pdf:
+                            doc = doc_dict[pdf_p]
+                            page_numbers = page_pdf[pdf_p]
+                            for page_num in page_numbers:
+                                print('a2.1')
+                                page = doc[page_num - 1]
+                                all_keywords = set()
+                                for retrieved_doc in retrieved_docs:
+                                    words = retrieved_doc.page_content.split()
+                                    keywords = [w.strip('.,!?;:') for w in words if len(w) > 4]
+                                    len_k = len(keywords) // 2
+                                    all_keywords.update(keywords[:len_k])
                                 
-                                # Render with highlights
-                            pix = page.get_pixmap(dpi=500)
-                            img_bytes = pix.tobytes("png")
-                            img = Image.open(io.BytesIO(img_bytes))
-                            imgs.append(img)
+                                # Highlight all keywords at once
+                                for keyword in all_keywords:
+                                    text_instances = page.search_for(keyword)
+                                    for inst in text_instances:
+                                        highlight = page.add_highlight_annot(inst)
+                                        highlight.set_colors(stroke=[1, 1, 0])
+                                        highlight.update()
+                                    
+                                    # Render with highlights
+                                pix = page.get_pixmap(dpi=500)
+                                img_bytes = pix.tobytes("png")
+                                img = Image.open(io.BytesIO(img_bytes))
+                                imgs.append(img)
                         print('a3')   
                             # Display in Streamlit
                             # st.image(img, caption=f"Page {page_num}")
@@ -505,7 +531,103 @@ if st.session_state.logged_in:
                     st.rerun()
                     
                 except Exception as e:
+                    full_context = []
+                    imgs = []
+                    retriever = st.session_state.retriever_obj
+                    starttime = time.perf_counter()
+                    retrieved_docs = retriever.get_all_results(user_query)
+                    try:
+                        print(retrieved_docs[0], '>>>>>>>>>m>e>t>a')
+                    except:
+                        st.info('No data in the vector store!')
+                    if st.session_state.pdf:
+                        all_pages = st.session_state.pdf.pages
+                        page_n = []
+                        print('a1')
+                        page_pdf = {}
+                        for i in retrieved_docs:
+                            print(str(i.metadata['pages']), 'here page')
+                            i.metadata['pages'] = json.loads(str(i.metadata['pages']))
+                            if i.metadata['pdf_name'] == '':
+                                print(i)
+                                continue
+                            if i.metadata['pdf_name'] not in page_pdf:
+                                page_pdf[i.metadata['pdf_name']] = i.metadata['pages']
+                            page_pdf[i.metadata['pdf_name']] = list(set(page_pdf[i.metadata['pdf_name']]+i.metadata['pages'])) 
+                            page_n = page_n+i.metadata['pages']
+                        full_context = []
+                        # for i in list(set(page_n)):
+                        #     full_context.append(all_pages[i])
+                        doc = st.session_state.doc
+                        page_numbers = list(set(page_n))
+                        print('a2')
+                        print('here dlkfj ', doc_dict)
+                        for pdf_p in page_pdf:
+                            doc = doc_dict[pdf_p]
+                            page_numbers = page_pdf[pdf_p]
+                            for page_num in page_numbers:
+                                print('a2.1')
+                                page = doc[page_num - 1]
+                                all_keywords = set()
+                                for retrieved_doc in retrieved_docs:
+                                    words = retrieved_doc.page_content.split()
+                                    keywords = [w.strip('.,!?;:') for w in words if len(w) > 4]
+                                    len_k = len(keywords) // 2
+                                    all_keywords.update(keywords[:len_k])
+                                
+                                # Highlight all keywords at once
+                                for keyword in all_keywords:
+                                    text_instances = page.search_for(keyword)
+                                    for inst in text_instances:
+                                        highlight = page.add_highlight_annot(inst)
+                                        highlight.set_colors(stroke=[1, 1, 0])
+                                        highlight.update()
+                                    
+                                    # Render with highlights
+                                pix = page.get_pixmap(dpi=500)
+                                img_bytes = pix.tobytes("png")
+                                img = Image.open(io.BytesIO(img_bytes))
+                                imgs.append(img)
+                        print('a3')   
+                            # Display in Streamlit
+                            # st.image(img, caption=f"Page {page_num}")
+                        
+                        st.session_state['context'].append(full_context)
+                        st.session_state['conte'].append(imgs)
+                    endtime = time.perf_counter()
+                    print('Retrieval time', endtime-starttime)
+                    # Prepare context from retrieved documents
+                    context = "\n\n".join([doc.page_content for doc in retrieved_docs])
+                    # print('context is ----------->\n', context)
+                    # Initialize LLM
+                    llm = ChatOllama(model="gemma3:27b", base_url = 'http://10.10.64.25:9500/')
                     
+
+                    
+                    # Generate response
+                    prompt = f"""Based on the following context, answer the user's question.
+                    
+    Context:
+    {context}
+
+    Chat History: {st.session_state.chat_history}
+
+    Question: {user_query}
+
+    Answer:"""
+                    
+                    response = llm.invoke(prompt)
+                    answer = response.content if hasattr(response, 'content') else str(response)
+                    
+                    # Add assistant response to history
+                    st.session_state.chat_history.append({
+                        'role': 'assistant',
+                        'content': answer,
+                        'context': full_context,
+                        'conte': imgs
+                    })
+                    
+                    st.rerun()
                     st.error(f"❌ Error generating response: {str(e)}")
 
 else:

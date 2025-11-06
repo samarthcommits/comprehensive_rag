@@ -1,11 +1,12 @@
 from langchain_text_splitters import RecursiveCharacterTextSplitter, TokenTextSplitter
 from langchain_core.documents import Document
 import json
+
 class RecursiveChunker:
     def __init__(self):
         pass
 
-    def create_chunks_basic(self, texts, pdf = None):
+    def create_chunks_basic(self, texts, pdf = None, pdf_name = None, num = 0):
         text_splitter = TokenTextSplitter(
             chunk_size=200,
             chunk_overlap=20,
@@ -14,9 +15,10 @@ class RecursiveChunker:
         if texts and not pdf:
             texts_em = text_splitter.create_documents(texts=texts)
             for i, k in enumerate(texts_em):
-                k.id = i
+                k.id = i+num+2
                 k.metadata['pages'] = '[]'
-                chunk.metadata['pk'] = f'{i+245}'
+                k.metadata['pk'] = f'{num+2+i+245}'
+                k.metadata['pdf_name'] = pdf_name
             return texts_em
         
         elif pdf:
@@ -66,9 +68,10 @@ class RecursiveChunker:
             
             # Assign IDs
             for i, chunk in enumerate(all_chunks):
-                chunk.id = i
-                chunk.metadata['pk'] = f'{i+245}'
+                chunk.id = i+num+2
+                chunk.metadata['pk'] = f'{i+num+2+245}'
                 chunk.metadata['pages'] = json.dumps(chunk.metadata['pages']) 
+                chunk.metadata['pdf_name'] = pdf_name
             
             return all_chunks
 

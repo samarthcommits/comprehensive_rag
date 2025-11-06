@@ -4,6 +4,8 @@ from Retrievers.heirarchical_retrieval import Parent_retrieval
 from Retrievers.query_expansion_retrieval import QExpansion_retriever
 from Retrievers.reranking_retrieval import Rerank
 from Retrievers.sparse_retrieval import SparseRetriever, SparseRetriever_milvus
+from pymilvus import connections, db, utility, Collection
+
 import ast
 import time
 from database import CollectionDatabase
@@ -14,7 +16,24 @@ chunker = RecursiveChunker()
 class Control:
     def __init__(self):
         pass
-    
+
+    def check_collection_size(self, collection_name = '', user_name = ''):
+        try:
+            connections.connect(host="127.0.0.1", port=19530, db_name=user_name)
+
+            collection = Collection(collection_name)
+            collection.load()
+
+            # Query for count
+            result = collection.query(
+                expr="",  # Empty expression matches all
+                output_fields=["count(*)"]
+            )
+            # json.loads(r/)
+            return int(result[0]['count(*)'])
+        except Exception as e:
+            print(e)
+            return 0
     def get_collection_name(self):
         collections = []
         with open('collection_names.txt', 'r') as f:
@@ -41,26 +60,26 @@ class Control:
             '4':    "query",
             '5':    "ann"
         }
+        pdf_name = ''
+        num = 0
+        # try:
+        for i in list(options1.values()):
+            try:
+                num = max(num, self.check_collection_size(collection_name=f'{collect_name}_{i}', user_name=user_name))
+            except Exception as e:
+                print(e)
+                continue
+        # except:
+        #     num = num
+        if pdf_full:
+            pdf_name = pdf_full.name
         if not chunks:
-            docments = chunker.create_chunks_basic(pdf=pdf, texts=[raw_text])
+            docments = chunker.create_chunks_basic(pdf=pdf, texts=[raw_text], pdf_name=pdf_name, num=num)
         else:
             docments = chunks
         print(f'chunks - {docments[:2]}')
         collection_name = self.get_collection_name()
-        # if not collect_name:
-        #     collect_name = ''
-        # # print('collect_name = ', collect_name)
-        # if collect_name!='':
-        #     print('collect_name1 = ', collect_name)
-        #     raw_text = ''
-        #     c_info = db_handler.get_collection_info(
-        #             collection_name=collect_name,
-        #             user_name=user_name
-        #         )
-        #     retriever = c_info['retrieval_technique']
-        # else:
-        #     print('collect_name = ', collect_name)
-        # full_collect = ''
+      
         if retriever==options1['1']:
             self.tech_name = 'sparse'
             full_collect = f'{collect_name}_sparse'
@@ -124,8 +143,25 @@ class Control:
         doc_map = {}
         docs = []
         retrievers = []
-        if len(raw_text)!=0 and pdf == None:
-            chunks = chunker.create_chunks_basic(pdf=pdf, texts=[raw_text])
+        pdf_name = ''
+        options1={
+                '1':    "sparse",
+                '2':    "dense",
+                '3':    "rerank",
+                '4':    "query",
+                '5':    "ann"
+            }
+        if pdf_full:
+            pdf_name = pdf_full.name
+        if len(raw_text)!=0 or pdf is not None:
+            num = 0
+            for i in list(options1.values()):
+                try:
+                    num = max(num, self.check_collection_size(collection_name=f'{collect_name}_{i}', user_name=user_name))
+                except Exception as e:
+                    print(e)
+                    continue
+            chunks = chunker.create_chunks_basic(pdf=pdf, texts=[raw_text], pdf_name=pdf_name, num=num)
         else:
             chunks = []
         options1={
@@ -135,9 +171,7 @@ class Control:
             '4':    "Query Expansion Retrieval",
             '5':    "ANN Retrieval"
         }
-        pdf_name = ''
-        if pdf_full:
-            pdf_name = pdf_full.name
+        
         for i in retriever:
             type1 = ''
             if options1['1']==i:
