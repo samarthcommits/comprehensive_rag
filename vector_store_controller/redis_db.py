@@ -17,4 +17,4 @@ class RedisDB:
     def __init__(self, index_name = 'default_name'):
         self.config.index_name = index_name
         self.vector_store = RedisVectorStore(redis_url="http://127.0.0.1:6379", embeddings=self.embeddings, config=self.config)
-        #testing
+        #testing22
