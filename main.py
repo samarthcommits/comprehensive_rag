@@ -1,28 +1,37 @@
 import streamlit as st
-@st.cache_data()
+print('1')
+from dotenv import load_dotenv
+load_dotenv()
+@st.cache_resource()
 def get_control():
     from controller import Control
     return Control()
+print('hi1')
+
 from langchain_ollama import ChatOllama
 from langchain.schema import HumanMessage, AIMessage
 from pymilvus import db, utility, connections
 import torch
 import html
 from langchain_google_genai import ChatGoogleGenerativeAI
+print('hi2')
 from streamlit_datalist import stDatalist
 from database import CollectionDatabase
 torch.classes.__path__ = [] # add this line to manually set it to empty. 
 import pdfplumber
 import tempfile
+print('hi3')
 import os
 import sys
 import time
 import pymupdf as fitz
 from PIL import Image
+print('hi4')
 import io
 from datetime import datetime
 from database import UserDatabase
 us = UserDatabase()
+print('hi5')
 # sys.path.append("C:/Users/samarth.srivastava/Desktop/RAG_comprehensive")
 # Page configuration
 st.set_page_config(
@@ -33,9 +42,11 @@ st.set_page_config(
 )
 
 import json
+print('hi5.1')
 cont = get_control()
-
+print('2')
 # Custom CSS for professional styling
+print('hi6')
 st.markdown("""
     <style>
     .main {
@@ -151,9 +162,12 @@ def login_form():
 
             else:
                 st.warning("Please fill all fields")
+
+print('3')
 # Configuration phase
 if st.session_state.logged_in:
     st.markdown("---")
+    print('4')
     if not st.session_state.setup_complete:
         if st.session_state.some_key:
             print('first some_key - >', st.session_state.some_key)
@@ -200,6 +214,7 @@ if st.session_state.logged_in:
             collect_name = st.session_state.collection
         else:
             st.session_state['collection'] = st.text_input(placeholder='(name   must be unique)', label='Enter collection name :')
+        print('5')
         if st.button('Proceed'):
             retriever_obj = cont.hybrid(
                                 # database=database,
@@ -231,10 +246,9 @@ if st.session_state.logged_in:
             if st.button('Logout'):
                 st.session_state.logged_in = False
                 st.rerun()
-        
+        print('6')
         # Initialize button
         if uploaded_file is not None:
-            
             if st.button("🚀 Initialize Retriever", use_container_width=True):
                 with st.spinner("Setting up retriever..."):
                     try:
@@ -295,6 +309,7 @@ if st.session_state.logged_in:
                         
                         # Clean up temporary file
                         # Store in session state
+                        print('7')
                         st.session_state.retriever_obj = retriever_obj
                         st.session_state.setup_complete = True
                         st.session_state.config = {
@@ -305,6 +320,7 @@ if st.session_state.logged_in:
                             'content': content
                         }
                         st.success("✅ Retriever initialized successfully!")
+                        print('8')
                         st.rerun()
                         
                     except Exception as e: 
@@ -353,10 +369,7 @@ if st.session_state.logged_in:
                 dir = pdf_name
                 file_p = os.path.join(file_path, dir)
                 with open(file_p, "rb") as f:
-                    file_bytes = f.read()
-                
-
-                 
+                    file_bytes = f.read()                 
                 # Create a "file-like" object similar to Streamlit's uploaded file
                 fake_uploaded_file = BytesIO(file_bytes)
                 # if not st.session_state.pdf:
@@ -364,7 +377,7 @@ if st.session_state.logged_in:
                     st.session_state.pdf = pdf
                 # if not st.session_state.doc:
                 st.session_state.doc = fitz.open(stream=file_bytes, filetype="pdf")
-            
+            print('aa')
             conn = connections.connect(db_name=st.session_state.config['user_name'], host="127.0.0.1", port="19530")
             collect_change = st.checkbox('Change collection')
             if collect_change:
@@ -453,104 +466,6 @@ if st.session_state.logged_in:
                             if i.metadata['pdf_name'] == '':
                                 print(i)
                                 continue
-                            if not page_pdf[i.metadata['pdf_name']]:
-                                page_pdf[i.metadata['pdf_name']] = i.metadata['pages']
-                            page_pdf[i.metadata['pdf_name']] = list(set(page_pdf[i.metadata['pdf_name']]+i.metadata['pages'])) 
-                            page_n = page_n+i.metadata['pages']
-                        full_context = []
-                        # for i in list(set(page_n)):
-                        #     full_context.append(all_pages[i])
-                        doc = st.session_state.doc
-                        page_numbers = list(set(page_n))
-                        print('a2')
-                        for pdf_p in page_pdf:
-                            doc = doc_dict[pdf_p]
-                            page_numbers = page_pdf[pdf_p]
-                            for page_num in page_numbers:
-                                print('a2.1')
-                                page = doc[page_num - 1]
-                                all_keywords = set()
-                                for retrieved_doc in retrieved_docs:
-                                    words = retrieved_doc.page_content.split()
-                                    keywords = [w.strip('.,!?;:') for w in words if len(w) > 4]
-                                    len_k = len(keywords) // 2
-                                    all_keywords.update(keywords[:len_k])
-                                
-                                # Highlight all keywords at once
-                                for keyword in all_keywords:
-                                    text_instances = page.search_for(keyword)
-                                    for inst in text_instances:
-                                        highlight = page.add_highlight_annot(inst)
-                                        highlight.set_colors(stroke=[1, 1, 0])
-                                        highlight.update()
-                                    
-                                    # Render with highlights
-                                pix = page.get_pixmap(dpi=500)
-                                img_bytes = pix.tobytes("png")
-                                img = Image.open(io.BytesIO(img_bytes))
-                                imgs.append(img)
-                        print('a3')   
-                            # Display in Streamlit
-                            # st.image(img, caption=f"Page {page_num}")
-                        
-                        st.session_state['context'].append(full_context)
-                        st.session_state['conte'].append(imgs)
-                    endtime = time.perf_counter()
-                    print('Retrieval time', endtime-starttime)
-                    # Prepare context from retrieved documents
-                    context = "\n\n".join([doc.page_content for doc in retrieved_docs])
-                    # print('context is ----------->\n', context)
-                    # Initialize LLM
-                    llm = ChatOllama(model="gemma3:27b", base_url = 'http://10.10.64.25:9500/')
-                    
-
-                    
-                    # Generate response
-                    prompt = f"""Based on the following context, answer the user's question.
-                    
-    Context:
-    {context}
-
-    Chat History: {st.session_state.chat_history}
-
-    Question: {user_query}
-
-    Answer:"""
-                    
-                    response = llm.invoke(prompt)
-                    answer = response.content if hasattr(response, 'content') else str(response)
-                    
-                    # Add assistant response to history
-                    st.session_state.chat_history.append({
-                        'role': 'assistant',
-                        'content': answer,
-                        'context': full_context,
-                        'conte': imgs
-                    })
-                    
-                    st.rerun()
-                    
-                except Exception as e:
-                    full_context = []
-                    imgs = []
-                    retriever = st.session_state.retriever_obj
-                    starttime = time.perf_counter()
-                    retrieved_docs = retriever.get_all_results(user_query)
-                    try:
-                        print(retrieved_docs[0], '>>>>>>>>>m>e>t>a')
-                    except:
-                        st.info('No data in the vector store!')
-                    if st.session_state.pdf:
-                        all_pages = st.session_state.pdf.pages
-                        page_n = []
-                        print('a1')
-                        page_pdf = {}
-                        for i in retrieved_docs:
-                            print(str(i.metadata['pages']), 'here page')
-                            i.metadata['pages'] = json.loads(str(i.metadata['pages']))
-                            if i.metadata['pdf_name'] == '':
-                                print(i)
-                                continue
                             if i.metadata['pdf_name'] not in page_pdf:
                                 page_pdf[i.metadata['pdf_name']] = i.metadata['pages']
                             page_pdf[i.metadata['pdf_name']] = list(set(page_pdf[i.metadata['pdf_name']]+i.metadata['pages'])) 
@@ -600,8 +515,9 @@ if st.session_state.logged_in:
                     context = "\n\n".join([doc.page_content for doc in retrieved_docs])
                     # print('context is ----------->\n', context)
                     # Initialize LLM
-                    llm = ChatOllama(model="gemma3:27b", base_url = 'http://10.10.64.25:9500/')
-                    
+                    # llm = ChatOllama(model="gemma3:27b", base_url = 'http://10.10.64.25:9500/')
+                    llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0.3, api_key="AIzaSyD_nzOsahTWd75pXRbVQ1QjpwQRtMFly3k")
+ 
 
                     
                     # Generate response
@@ -628,6 +544,9 @@ if st.session_state.logged_in:
                     })
                     
                     st.rerun()
+                    
+                except Exception as e:
+                    
                     st.error(f"❌ Error generating response: {str(e)}")
 
 else:

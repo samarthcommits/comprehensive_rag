@@ -7,12 +7,15 @@ from Retrievers.reranking_retrieval import Rerank
 from langchain.retrievers import ParentDocumentRetriever
 from langchain.storage import InMemoryStore
 from langchain_core.documents import Document
+from vector_store_controller.milvus_db import MilvusDB
+from uuid import uuid4
 
 
 
 class Parent_retrieval:
-    def __init__(self, path = r'C:\Users\samarth.srivastava\Desktop\RAG_comprehensive\vectorstores', collection_name = 'collect_chroma1', username = 'default'): 
-        self.dense = ChromaDB_Heirarchy(collection_name=collection_name, persist_directory=path)
+    def __init__(self, path = r'C:\Users\samarth.srivastava\Desktop\RAG_comprehensive\vectorstores', collection_name = 'collect_chroma1', username = 'default', auto_id = False): 
+        # self.dense = ChromaDB_Heirarchy(collection_name=collection_name, persist_directory=path)
+        self.dense = MilvusDB(collection_name=collection_name, user_name=username, auto_id=auto_id)
         self.child_splitter = RecursiveCharacterTextSplitter(chunk_size=20, chunk_overlap = 5)
         self.parent_splitter = RecursiveCharacterTextSplitter(chunk_size=400, chunk_overlap = 50)
 
@@ -37,7 +40,14 @@ class Parent_retrieval:
         if rerank:
             rr = Rerank(self.retriever)
             self.retriever = rr.reranking_retreiver()
-        self.retriever.add_documents([Document(raw_text)])
+        # uuids = [str(uuid4()) for _ in range(len(texts))]
+        doc = Document(raw_text)
+        doc.metadata['pk'] = '34'
+        doc.id = str('1')
+        doc.metadata['pages'] = '[]'
+        doc.metadata['pdf_name'] = ''
+        # doc.metadata['pk']
+        self.retriever.add_documents(documents=[Document(page_content=raw_text)])
 
 
         return self.retriever
