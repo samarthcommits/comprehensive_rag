@@ -54,7 +54,7 @@ This provides:
 
 Example output:
 
--![alt text](image.png)
+-![alt text](images/image.png)
 
 ---
 
@@ -117,8 +117,8 @@ http://localhost:8501
 - PDF Annotator retrieves original PDF pages and highlights matched chunks
 
 Streamlit displays:
-![alt text](image-1.png)
-![alt text](image-3.png)
+![alt text](images/image-1.png)
+![alt text](images/image-3.png)
 
 
 ## 🧪 Tech Stack
