@@ -516,7 +516,7 @@ if st.session_state.logged_in:
                     # print('context is ----------->\n', context)
                     # Initialize LLM
                     # llm = ChatOllama(model="gemma3:27b", base_url = 'http://10.10.64.25:9500/')
-                    llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0.3, api_key="AIzaSyD_nzOsahTWd75pXRbVQ1QjpwQRtMFly3k")
+                    llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0.3, api_key=os.environ['GEMINI_API_KEY'])
  
 
                     
