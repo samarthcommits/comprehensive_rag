@@ -38,10 +38,19 @@ def main():
             st.markdown("---")
             
             # Navigation
+            if 'check2' in st.session_state:
+                print('yes')
+                if st.session_state['check2']:
+                    st.session_state['check_key1'] = "💬 Chat"
+                    st.session_state['check2'] = False
+                    st.rerun()
+
+            print('no')
             page = st.radio(
                 "Navigation",
                 ["📚 Document Management", "💬 Chat"],
-                label_visibility="collapsed"
+                label_visibility="collapsed", 
+                key='check_key1'
             )
             
             st.markdown("---")

@@ -3,12 +3,13 @@ import time
 import json
 import os
 from io import BytesIO
+from langchain_ollama import ChatOllama
 import pdfplumber
 import pymupdf as fitz
 from PIL import Image
 import io
 from langchain_google_genai import ChatGoogleGenerativeAI
-from pymilvus import connections, utility
+from pymilvus import MilvusClient
 from utils.session_state import reset_retriever_state
 
 def show():
@@ -16,8 +17,8 @@ def show():
     
     if not st.session_state.setup_complete:
         st.warning("⚠️ Please set up a collection first in Document Management")
-        if st.button("Go to Document Management"):
-            st.switch_page("pages/document_management.py")
+        # if st.button("Go to Document Management"):
+        #     st.switch_page("pages/document_management.py")
         return
     
     st.title("💬 Chat with Your Documents")
@@ -52,6 +53,10 @@ def show_sidebar_config():
         if st.checkbox("🔄 Switch Collection"):
             show_collection_switcher()
         
+        st.markdown("---")
+
+        check = st.checkbox('Refine results', help='Takes more time to fetch relevant documents, but gives better output', key='rerank')
+
         st.markdown("---")
         
         # Reset options
@@ -132,13 +137,14 @@ def load_collection_pdfs():
 def show_collection_switcher():
     """Allow switching between collections"""
     
-    conn = connections.connect(
+    db1 = MilvusClient(
         db_name=st.session_state.config['user_name'],
-        host="127.0.0.1",
-        port="19530"
+        uri = os.environ['MILVUS_URL'],
+        # password = os.environ['MILVUS_PASSWORD'],
+        # user = 'milvus'
     )
     
-    collections = utility.list_collections()
+    collections = db1.list_collections()
     
     selected_collection = st.selectbox(
         'Switch to Collection',
@@ -191,7 +197,7 @@ def show_chat_interface():
     if user_query:
         handle_user_query(user_query)
 
-def handle_user_query(user_query):
+def handle_user_query(user_query, rerank = True):
     """Process user query and generate response"""
     
     # Add user message to history
@@ -200,13 +206,16 @@ def handle_user_query(user_query):
         'content': user_query
     })
     
-    with st.spinner("🤔 Thinking..."):
+    with st.spinner("🤔 Thinking...", show_time=True):
         try:
             retriever = st.session_state.retriever_obj
             
             # Retrieve relevant documents
             start_time = time.perf_counter()
-            retrieved_docs = retriever.get_all_results(user_query)
+            check = False
+            if 'rerank' in st.session_state:
+                check = st.session_state['rerank']
+            retrieved_docs = retriever.get_all_results(query = user_query, rerank = check)
             retrieval_time = time.perf_counter() - start_time
             
             if not retrieved_docs:
@@ -220,11 +229,12 @@ def handle_user_query(user_query):
             context = "\n\n".join([doc.page_content for doc in retrieved_docs])
             
             # Generate response using LLM
-            llm = ChatGoogleGenerativeAI(
-                model="gemini-2.0-flash",
-                temperature=0.3,
-                api_key=os.getenv("GOOGLE_API_KEY", "")
-            )
+            llm = ChatOllama(model = 'gemma3:27b', base_url=os.environ['OLLAMA_API_ADDRESS'])
+            # llm = ChatGoogleGenerativeAI(
+            #     model="gemini-2.0-flash",
+            #     temperature=0.3,
+            #     api_key=os.getenv("GOOGLE_API_KEY", "")
+            # )
             
             prompt = f"""Based on the following context, answer the user's question accurately and concisely.
 
@@ -261,6 +271,285 @@ Answer:"""
                 st.code(traceback.format_exc())
 
 def process_pdf_highlights(retrieved_docs):
+    """Highlight *all words* inside windows where multiple keywords co-occur."""
+
+    imgs = []
+
+    if not st.session_state.get("doc_dict"):
+        return imgs
+
+    try:
+
+        page_pdf = {}
+        for doc in retrieved_docs:
+            try:
+                pages = json.loads(str(doc.metadata.get("pages", "[]")))
+                pdf_name = doc.metadata.get("pdf_name", "")
+                if not pdf_name or pdf_name not in st.session_state.doc_dict:
+                    continue
+
+                page_pdf.setdefault(pdf_name, []).extend(pages)
+                page_pdf[pdf_name] = list(set(page_pdf[pdf_name]))
+            except Exception:
+                continue
+
+        all_keywordss = []
+        for doc in retrieved_docs:
+            all_keywords = set()
+            words = doc.page_content.split()
+            keywords = [w.strip(".,!?;:").lower() for w in words if len(w) > 2]
+            keywords = words
+            # all_keywords
+            all_keywords.update(keywords[: len(keywords)])
+            all_keywordss.append(all_keywords)
+
+        WINDOW_SIZE = 200
+        STEP = 12
+        THRESHOLD_RATIO = 0.989
+        print(THRESHOLD_RATIO, '------>thres')
+        pal = [(1, 1, 0), (1, 1, 0), (1, 1, 0)]
+        print('here-------------------look here', len(all_keywordss), len(retrieved_docs))
+        print('pdf page - ', page_pdf)
+        for pdf_name, page_nums in page_pdf.items():
+            pdf_doc = st.session_state.doc_dict[pdf_name]
+            print('pdf doc - ', pdf_doc)
+            for page_num in page_nums:
+                try:
+                    page = pdf_doc[page_num - 1]
+                    words_info = page.get_text("words")
+                    words_info = sorted(words_info, key=lambda w: (w[1], w[0]))
+                    words = [w[4].lower() for w in words_info]
+
+
+                    ke = {}
+                    # j = 0
+                    for j, all_keywords in enumerate(all_keywordss):
+                        i = 0
+                        print('here---------- here', j)
+                        while i < len(words):
+                            # print('i', i)
+                            wind = int(len(all_keywords)*1.2)
+                            window = words_info[i:i + wind]
+                            window_words = [w[4].lower() for w in window]
+                            # window_words = [w.strip(".,!?;:").lower() for w in window_words if len(w) > 2]
+
+                            keyword_count = len([w for w in window_words if w in all_keywords])
+
+                            if keyword_count >= THRESHOLD_RATIO * len(all_keywords):
+                                # flag = 0
+                                ke[j] = THRESHOLD_RATIO * len(all_keywords)
+                                for ijj, w in enumerate(window):
+                                    # print('w - ', ijj)
+                                    rect = fitz.Rect(w[0], w[1], w[2], w[3])
+                                    highlight = page.add_highlight_annot(rect)
+                                    # try:
+                                    # print(pal[j], 'palj', j, pal)
+                                    highlight.set_colors(stroke=pal[0])  
+                                    # except:
+                                    #     highlight.set_colors(stroke=(1, 0, 0))  
+                                    highlight.update()
+
+                                i += STEP
+
+                            else:
+                                i += STEP
+
+                    # Render page
+                    pix = page.get_pixmap(dpi=200)
+                    img = Image.open(io.BytesIO(pix.tobytes("png")))
+                    imgs.append(img)
+                    print('appended')
+
+                except Exception as e:
+                    print('exception here - >', e)
+                    continue
+
+    except Exception as e:
+        st.warning(f"Could not highlight PDFs: {str(e)}")
+
+    return imgs
+
+def process_pdf_highlights_v3(retrieved_docs):
+    """Run multiple highlight passes — one per retrieved doc keyword list."""
+
+    imgs = []
+
+    if not st.session_state.get("doc_dict"):
+        return imgs
+
+    try:
+        # -----------------------------
+        # STEP 1 — Map PDFs to relevant pages
+        # -----------------------------
+        page_pdf = {}
+        for doc in retrieved_docs:
+            try:
+                pages = json.loads(str(doc.metadata.get("pages", "[]")))
+                pdf_name = doc.metadata.get("pdf_name", "")
+                if not pdf_name or pdf_name not in st.session_state.doc_dict:
+                    continue
+
+                page_pdf.setdefault(pdf_name, []).extend(pages)
+                page_pdf[pdf_name] = list(set(page_pdf[pdf_name]))
+            except Exception:
+                continue
+
+        # ---------------------------------------------------------
+        # STEP 2 — 🔥 Build SEPARATE keyword lists for each doc
+        # ---------------------------------------------------------
+        keyword_lists = []   # 🔥 each element = keyword list for one doc
+
+        for doc in retrieved_docs:
+            words = doc.page_content.split()
+            keywords = [w.strip(".,!?;:").lower() for w in words]
+            keyword_lists.append(keywords)    # 🔥 FULL keyword list for this doc
+
+        # ---------------------------------------------------------
+        # STEP 3 — 🔥 MULTIPLE highlight passes (one per keyword list)
+        # ---------------------------------------------------------
+        WINDOW_SIZE = 220
+        STEP = 35
+        THRESHOLD_RATIO = 0.35
+
+        for pdf_name, page_nums in page_pdf.items():
+            pdf_doc = st.session_state.doc_dict[pdf_name]
+
+            for page_num in page_nums:
+                try:
+                    page = pdf_doc[page_num - 1]
+                    words_info = sorted(
+                        page.get_text("words"),
+                        key=lambda w: (w[1], w[0])
+                    )
+                    lower_words = [w[4].lower() for w in words_info]
+
+                    # 🔥 Run one highlighting loop PER keyword list
+                    # -------------------------------------------------
+                    for keywords in keyword_lists:     # 🔥 Multi-pass
+                        i = 0
+                        while i < len(lower_words):
+                            window = words_info[i : i + WINDOW_SIZE]
+                            window_words = [w[4].lower() for w in window]
+
+                            keyword_count = len([w for w in window_words if w in keywords])
+
+                            if keyword_count >= THRESHOLD_RATIO * len(keywords):
+
+                                # Highlight all words in window
+                                for w in window:
+                                    rect = fitz.Rect(w[0], w[1], w[2], w[3])
+                                    highlight = page.add_highlight_annot(rect)
+                                    highlight.set_colors(stroke=(1, 1, 0))
+                                    highlight.update()
+
+                                i += WINDOW_SIZE
+                            else:
+                                i += STEP
+                    # -------------------------------------------------
+
+                    # Render final combined highlights
+                    pix = page.get_pixmap(dpi=200)
+                    img = Image.open(io.BytesIO(pix.tobytes("png")))
+                    imgs.append(img)
+
+                except Exception:
+                    continue
+
+    except Exception as e:
+        st.warning(f"Could not highlight PDFs: {str(e)}")
+
+    return imgs
+
+
+def process_pdf_highlights_v2(retrieved_docs):
+    """Highlight *all words* inside windows where multiple keywords co-occur."""
+
+    imgs = []
+
+    if not st.session_state.get("doc_dict"):
+        return imgs
+
+    try:
+        # -----------------------------
+        # STEP 1 — Map PDFs to relevant pages
+        # -----------------------------
+        page_pdf = {}
+        for doc in retrieved_docs:
+            try:
+                pages = json.loads(str(doc.metadata.get("pages", "[]")))
+                pdf_name = doc.metadata.get("pdf_name", "")
+                if not pdf_name or pdf_name not in st.session_state.doc_dict:
+                    continue
+
+                page_pdf.setdefault(pdf_name, []).extend(pages)
+                page_pdf[pdf_name] = list(set(page_pdf[pdf_name]))
+            except Exception:
+                continue
+
+        # -----------------------------
+        # STEP 2 — Extract keyword set
+        # -----------------------------
+        all_keywords = set()
+        for doc in retrieved_docs:
+            words = doc.page_content.split()
+            keywords = [w.strip(".,!?;:").lower() for w in words if len(w) > 4]
+            # keywords = [w.strip(".,!?;:").lower() for w in words]
+            all_keywords.update(keywords[: len(keywords) // 2])
+
+        # -----------------------------
+        # STEP 3 — Highlight windows
+        # -----------------------------
+        WINDOW_SIZE = 220
+        STEP = 35
+        THRESHOLD_RATIO = 0.35
+
+        for pdf_name, page_nums in page_pdf.items():
+            pdf_doc = st.session_state.doc_dict[pdf_name]
+
+            for page_num in page_nums:
+                try:
+                    page = pdf_doc[page_num - 1]
+                    words_info = page.get_text("words")
+                    words_info = sorted(words_info, key=lambda w: (w[1], w[0]))
+                    words = [w[4].lower() for w in words_info]
+
+                    i = 0
+                    while i < len(words):
+                        window = words_info[i:i + WINDOW_SIZE]
+                        window_words = [w[4].lower() for w in window]
+
+                        keyword_count = len([w for w in window_words if w in all_keywords])
+
+                        if keyword_count >= THRESHOLD_RATIO * len(all_keywords):
+
+                            # 🔥 Highlight *all* words in this window
+                            for w in window:
+                                rect = fitz.Rect(w[0], w[1], w[2], w[3])
+                                highlight = page.add_highlight_annot(rect)
+                                highlight.set_colors(stroke=(1, 1, 0))  # yellow
+                                highlight.update()
+
+                            # Skip over this entire block
+                            i += WINDOW_SIZE
+
+                        else:
+                            i += STEP
+
+                    # Render page
+                    pix = page.get_pixmap(dpi=200)
+                    img = Image.open(io.BytesIO(pix.tobytes("png")))
+                    imgs.append(img)
+
+                except Exception:
+                    continue
+
+    except Exception as e:
+        st.warning(f"Could not highlight PDFs: {str(e)}")
+
+    return imgs
+
+
+def process_pdf_highlights_v1(retrieved_docs):
     """Process PDFs and highlight relevant sections"""
     
     imgs = []

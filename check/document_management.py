@@ -4,7 +4,7 @@ import tempfile
 import time
 import pdfplumber
 import pymupdf as fitz
-from pymilvus import connections, db, utility
+from pymilvus import MilvusClient
 from utils.session_state import reset_chat_state
 
 # Lazy import controller
@@ -20,17 +20,18 @@ def show():
     st.markdown("Manage your document collections and upload new files")
     
     # Initialize connection
-    conn = connections.connect(host="127.0.0.1", port="19530")
+    db1 = MilvusClient(uri = os.environ['MILVUS_URL'])
+    # db = 
     
     # Ensure user database exists
-    database_list = db.list_database()
+    database_list = db1.list_databases()
     user_name = st.session_state.user_name
     
     if user_name not in database_list:
-        db.create_database(db_name=user_name)
+        db1.create_database(db_name=user_name)
         st.success(f"✅ Created database for user: {user_name}")
     
-    conn = connections.connect(host="127.0.0.1", port="19530", db_name=user_name)
+    db1 = MilvusClient(uri = os.environ['MILVUS_URL'], db_name=user_name)
     
     # Main layout
     col1, col2 = st.columns([2, 1])
@@ -182,10 +183,12 @@ def show_document_upload(initialize = True, upload = True):
             )
     
     col1, col2 = st.columns(2)
-    if uploaded_file and initialize:
-        with col1:
-            if st.button("🚀 Use Selected Collection", use_container_width=True, disabled=not st.session_state.collection):
-                initialize_empty_collection()
+    # if uploaded_file:
+    with col1:
+        if st.button("🚀 Use Selected Collection", use_container_width=True, disabled=not st.session_state.collection):
+            initialize_empty_collection()
+            st.session_state['check2'] = True
+            st.rerun()
     
     with col2:
         if uploaded_file and st.button("📁 Process & Upload", use_container_width=True):
@@ -211,7 +214,9 @@ def initialize_empty_collection():
             
             st.success("✅ Collection initialized successfully!")
             reset_chat_state()
+            
             time.sleep(1)
+            st.session_state['check2'] = True
             st.rerun()
             
         except Exception as e:
@@ -261,7 +266,8 @@ def process_and_upload(uploaded_file):
                 collect_name=st.session_state.collection,
                 user_name=st.session_state.user_name,
                 pdf=doc,
-                pdf_full=uploaded_file
+                pdf_full=uploaded_file,
+                retriever=['Sparse Retrieval', 'ANN Retrieval', 'Dense Retrieval']
             )
             
             st.session_state.retriever_obj = retriever_obj
