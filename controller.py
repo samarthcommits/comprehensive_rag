@@ -16,7 +16,7 @@ chunker = RecursiveChunker()
 
 class Control:
     def __init__(self):
-        self.reranker = CrossEncoder('models/reranker')
+        self.reranker = CrossEncoder('models1/reranker')
         # pass
 
     def check_collection_size(self, collection_name = '', user_name = ''):
