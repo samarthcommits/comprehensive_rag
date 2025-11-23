@@ -4,6 +4,7 @@ from Retrievers.heirarchical_retrieval import Parent_retrieval
 from Retrievers.query_expansion_retrieval import QExpansion_retriever
 from Retrievers.reranking_retrieval import Rerank
 from Retrievers.sparse_retrieval import SparseRetriever, SparseRetriever_milvus
+from sentence_transformers import CrossEncoder
 from pymilvus import connections, db, utility, Collection
 
 import ast
@@ -15,7 +16,8 @@ chunker = RecursiveChunker()
 
 class Control:
     def __init__(self):
-        pass
+        self.reranker = CrossEncoder('models1/reranker')
+        # pass
 
     def check_collection_size(self, collection_name = '', user_name = ''):
         try:
@@ -34,22 +36,22 @@ class Control:
         except Exception as e:
             print(e)
             return 0
-    def get_collection_name(self):
-        collections = []
-        with open('collection_names.txt', 'r') as f:
-            collections = ast.literal_eval(f.read())
-        collection_name = 'default'
-        i = 0
-        while True:
-            if f'collect{i}' not in collections:
-                collection_name = f'collect{i}'
-                collections.append(collection_name)
-                with open('collection_names.txt', 'w') as f:
-                    f.write(str(collections))
-                break
-            i+=1
-        print('collection_name = ', collection_name)
-        return collection_name
+    # def get_collection_name(self):
+    #     collections = []
+    #     with open('collection_names.txt', 'r') as f:
+    #         collections = ast.literal_eval(f.read())
+    #     collection_name = 'default'
+    #     i = 0
+    #     while True:
+    #         if f'collect{i}' not in collections:
+    #             collection_name = f'collect{i}'
+    #             collections.append(collection_name)
+    #             with open('collection_names.txt', 'w') as f:
+    #                 f.write(str(collections))
+    #             break
+    #         i+=1
+    #     print('collection_name = ', collection_name)
+    #     return collection_name
     
     def create_retriever(self, database = 'MilvusDB', chunking = 'recursive', retriever = 'dense', raw_text = '', collect_name = '', user_name = 'default', pdf = None, chunks = None, pdf_full = None):
 
@@ -78,7 +80,7 @@ class Control:
         else:
             docments = chunks
         print(f'chunks - {docments[:2]}')
-        collection_name = self.get_collection_name()
+        collection_name = collect_name
       
         if retriever==options1['1']:
             self.tech_name = 'sparse'
@@ -137,7 +139,7 @@ class Control:
             return self.ret.invoke(input=query)[:2]
         return
 
-    def hybrid(self, database = 'MilvusDB', chunking = 'recursive', retriever = ['Sparse Retrieval', 'ANN Retrieval', 'Reranked Retrieval', 'Dense Retrieval'], raw_text = '', collect_name = '', user_name = 'default', pdf = None, query = '', pdf_full = None):
+    def hybrid(self, database = 'MilvusDB', chunking = 'recursive', retriever = ['Sparse Retrieval', 'ANN Retrieval', 'Dense Retrieval'], raw_text = '', collect_name = '', user_name = 'default', pdf = None, query = '', pdf_full = None):
         all_docs = []
         p = 0
         doc_map = {}
@@ -206,7 +208,7 @@ class Control:
         self.retrievers = retrievers
         return self
 
-    def get_all_results(self, query): 
+    def get_all_results(self, query, rerank = False): 
         all_docs = []
         p = 0
         doc_map = {}
@@ -253,8 +255,20 @@ class Control:
                 result.append(i)
                 # print(i, 'aft')
         
-        print(result)
-        return result
+        # print(result)
+        m2 = CrossEncoder('models1/reranker')
+        for i in result:
+            i.metadata['re_score'] = 0.5
+        if rerank:
+            m2 = self.reranker
+            passages = result
+            for i in passages:
+                scores = m2.predict([(query, i.page_content)]) 
+                i.metadata['re_score'] = scores[0]
+            return sorted(passages, key = lambda document: document.metadata['re_score'], reverse = True)[:3]
+        return result[:4]
+
+
 
         # for i in ranks
                 

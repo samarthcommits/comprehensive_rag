@@ -1,7 +1,7 @@
 import os
 
 if "CO_API_KEY" not in os.environ:
-    os.environ["CO_API_KEY"] = 'zf6XEllXJAVKyHmUY0QP6OQmpSlwAFXvSBjKFJYS'
+    os.environ["CO_API_KEY"] = os.environ.get('COHERE_API_KEY')
 from vector_store_controller.chroma_db import ChromaDB
 from vector_store_controller.milvus_db import MilvusDB, MilvusDB_ANN
 from chunking.recursive_char import RecursiveChunker
@@ -9,7 +9,7 @@ from Retrievers.reranking_retrieval import Rerank
 
 class DenseRetrieval:
     
-    def __init__(self, path = r'C:\Users\samarth.srivastava\Desktop\RAG_comprehensive\vectorstores', collection_name = 'collect_chroma1', database = 'milvus', user_name = 'default', existing = False): 
+    def __init__(self, path = rf"{os.environ.get('PATH_TO_CHROMA_VEC_STORE')}", collection_name = 'collect_chroma1', database = 'milvus', user_name = 'default', existing = False): 
         if database=='milvus':
             self.dense = MilvusDB(collection_name=collection_name, user_name=user_name)
         else:

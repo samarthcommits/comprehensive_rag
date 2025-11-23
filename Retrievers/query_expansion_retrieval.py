@@ -1,9 +1,9 @@
 from langchain_ollama import ChatOllama
 from Retrievers.dense_retrieval import DenseRetrieval
-
+import os
 
 class QExpansion_retriever(DenseRetrieval):
-    model = ChatOllama(model = 'qwen2.5:14b', base_url='http://10.10.64.25:11434/')
+    model = ChatOllama(model = 'qwen2.5:14b', base_url=os.environ.get('OLLAMA_API_ADDRESS'))
     def __init__(self, collection_name = 'default_name'):
         super().__init__(collection_name=collection_name)
 

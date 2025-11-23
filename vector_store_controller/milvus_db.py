@@ -3,6 +3,8 @@ from langchain_milvus import Milvus, BaseMilvusBuiltInFunction, BM25BuiltInFunct
 from langchain_core.documents import Document
 from langchain_ollama import OllamaEmbeddings
 from uuid import uuid4
+import os
+
 def check_collection_size(collection_name = '', user_name = ''):
     try:
         connections.connect(host="127.0.0.1", port=19530, db_name=user_name)
@@ -22,10 +24,12 @@ def check_collection_size(collection_name = '', user_name = ''):
         return 0
 
 class MilvusDB:
-    def __init__(self, collection_name = 'default', user_name = 'default', embeddings = OllamaEmbeddings(model="mxbai-embed-large:latest", base_url='http://10.10.64.25:11434')):
-        URI = "http://localhost:19530"
+    def __init__(self, collection_name = 'default', user_name = 'default', embeddings = OllamaEmbeddings(model="mxbai-embed-large:latest", base_url='http://10.10.64.25:11434'), auto_id = False):
+        URI = os.environ.get('MILVUS_URL')
+        print(f'URI--------------->{URI}\n\n\n')
         conn = connections.connect(host="127.0.0.1", port=19530)
-
+        if not auto_id:
+            auto_id = False
         database_list = db.list_database()
         if user_name not in database_list:
             db.create_database(db_name=user_name)
@@ -36,6 +40,7 @@ class MilvusDB:
                     embedding_function = embeddings,
                     collection_name=collection_name,
                     connection_args={"uri": URI, 'db_name':user_name},
+                    auto_id=auto_id
                 )
         else:
             documents = Document(
@@ -51,6 +56,7 @@ class MilvusDB:
                 embedding=embeddings,
                 collection_name=collection_name,
                 connection_args={"uri": URI, 'db_name':user_name},
+                auto_id = auto_id
             )
         print('collection inserted', collection_name)
         self.collect_num = check_collection_size(user_name=user_name, collection_name=collection_name)
@@ -71,7 +77,7 @@ class MilvusDB:
 
 class MilvusDB_Sparse:
     def __init__(self, collection_name = 'default', user_name = 'default'):
-        URI = "http://localhost:19530"
+        URI = os.environ.get('MILVUS_URL')
         conn = connections.connect(host="127.0.0.1", port=19530)
 
         database_list = db.list_database()
@@ -131,7 +137,7 @@ class MilvusDB_Sparse:
 
 class MilvusDB_ANN:
     def __init__(self, collection_name = 'default', user_name = 'default', embeddings = OllamaEmbeddings(model="mxbai-embed-large:latest", base_url="http://10.10.64.25:11434")):
-        URI = "http://localhost:19530"
+        URI = os.environ.get('MILVUS_URL')
         conn = connections.connect(host="127.0.0.1", port=19530)
 
         database_list = db.list_database()
