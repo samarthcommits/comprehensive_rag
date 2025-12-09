@@ -36,22 +36,6 @@ class Control:
         except Exception as e:
             print(e)
             return 0
-    # def get_collection_name(self):
-    #     collections = []
-    #     with open('collection_names.txt', 'r') as f:
-    #         collections = ast.literal_eval(f.read())
-    #     collection_name = 'default'
-    #     i = 0
-    #     while True:
-    #         if f'collect{i}' not in collections:
-    #             collection_name = f'collect{i}'
-    #             collections.append(collection_name)
-    #             with open('collection_names.txt', 'w') as f:
-    #                 f.write(str(collections))
-    #             break
-    #         i+=1
-    #     print('collection_name = ', collection_name)
-    #     return collection_name
     
     def create_retriever(self, database = 'MilvusDB', chunking = 'recursive', retriever = 'dense', raw_text = '', collect_name = '', user_name = 'default', pdf = None, chunks = None, pdf_full = None):
 
@@ -254,6 +238,7 @@ class Control:
             if i.metadata['pk'] in rank_keys:
                 result.append(i)
                 # print(i, 'aft')
+                print('check')
         
         # print(result)
         m2 = CrossEncoder('models1/reranker')
